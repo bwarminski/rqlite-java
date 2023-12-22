@@ -46,10 +46,15 @@ public class RqliteStatement implements Statement {
     checkSQLNullOrEmpty(sql);
 
     // This is weird.
-    // If in a transaction
-    // If any result has been accessed, error
-    // Else buffer query
-    // If not in a transaction,
+    if (conn.isInTransaction()) {
+      // If in a transaction
+      // If any result has been accessed, error
+      // Else buffer query
+    } else {
+
+    }
+
+    // If not in a transaction, send the query
     return null;
   }
 

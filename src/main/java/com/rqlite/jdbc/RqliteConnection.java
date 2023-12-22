@@ -27,6 +27,7 @@ import com.rqlite.impl.RqliteImpl;
 public class RqliteConnection implements Connection {
   private final Rqlite rqlite;
   private boolean closed = true;
+  private boolean inTransaction = false;
 
   public RqliteConnection(String url, Properties info) throws SQLException {
     RqliteJDBCUrl jdbcUrl = RqliteJDBCUrl.parse(url, info);
@@ -1542,5 +1543,9 @@ public class RqliteConnection implements Connection {
     if (this.closed) {
       throw new SQLException("Connection is closed");
     }
+  }
+
+  protected boolean isInTransaction() {
+    return this.inTransaction;
   }
 }
