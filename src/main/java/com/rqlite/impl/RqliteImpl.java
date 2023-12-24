@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.api.client.http.HttpResponse;
-import com.google.api.client.http.HttpResponseException;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
@@ -19,12 +18,11 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.rqlite.Rqlite;
 import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
-import com.rqlite.dto.GenericResults;
 import com.rqlite.dto.ParameterizedStatement;
 import com.rqlite.dto.Pong;
+import com.rqlite.dto.QueryRequest;
 import com.rqlite.dto.QueryResults;
 import com.rqlite.dto.Statement;
-import com.rqlite.exceptions.NodeUnavailableException;
 import com.rqlite.exceptions.RqliteException;
 
 public class RqliteImpl implements Rqlite {
@@ -67,105 +65,41 @@ public class RqliteImpl implements Rqlite {
         }
     }
 
-    private GenericResults tryOtherPeers(GenericRequest request, String[] stmts) throws NodeUnavailableException {
-        // Cycle through the list of nodes in the config file.
-        long end = System.currentTimeMillis() + timeoutDelay;
-        if (peers != null) {
-            while (System.currentTimeMillis() < end) {
-                for (RqliteNode node : this.peers) {
-                    try {
-                        if (nodeRequestFactoryMap.containsKey(node)) {
-                            requestFactory = nodeRequestFactoryMap.get(node);
-                        } else {
-                            requestFactory = new RequestFactory(node.proto, node.host, node.port);
-                            nodeRequestFactoryMap.put(node, requestFactory);
-                        }
-                        GenericRequest r = requestFactory.AdoptRequest(request);
-                        GenericResults results = r.execute();
-                        return results;
-                    } catch (IOException e) {
-                    }
-                }
-                // pause to avoid churning
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
-        throw new NodeUnavailableException("Could not connect to rqlite node.  Please check that the node is online and that your config files point to the correct address.");
-    }
-
-    private GenericResults tryOtherPeers(GenericRequest request, ParameterizedStatement[] stmts) throws NodeUnavailableException {
-        // Cycle through the list of nodes in the config file.
-        long end = System.currentTimeMillis() + timeoutDelay;
-        if (peers != null) {
-            while (System.currentTimeMillis() < end) {
-                for (RqliteNode node : this.peers) {
-                    try {
-                        if (nodeRequestFactoryMap.containsKey(node)) {
-                            requestFactory = nodeRequestFactoryMap.get(node);
-                        } else {
-                            requestFactory = new RequestFactory(node.proto, node.host, node.port);
-                            nodeRequestFactoryMap.put(node, requestFactory);
-                        }
-                        GenericRequest r = requestFactory.AdoptRequest(request);
-                        GenericResults results = r.execute();
-                        return results;
-                    } catch (IOException e) {
-                    }
-                }
-                // pause to avoid churning
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
-        throw new NodeUnavailableException("Could not connect to rqlite node.  Please check that the node is online and that your config files point to the correct address.");
-    }
-
     public QueryResults Query(String[] stmts, boolean tx, ReadConsistencyLevel lvl) throws RqliteException {
-        QueryRequest request;
-
-        try {
-            request = this.requestFactory.buildQueryRequest(stmts);
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-            return null;
-        }
-        request.enableTransaction(tx).setReadConsistencyLevel(lvl);
-
-        try {
-            return request.execute();
-        } catch (HttpResponseException responseException) {
-            return (QueryResults) this.tryOtherPeers(request, stmts);
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            return (QueryResults) this.tryOtherPeers(request, stmts);
-        }
+        QueryRequest request = QueryRequest.newBuilder()
+            .setStatements(Arrays.stream(stmts).map((s) -> Statement.newBuilder().setSql(s).build()).toList())
+            .setTransaction(tx)
+            .setLevel(lvl)
+            .build();
+        return Query(request);
     }
     @Override
     public QueryResults Query(ParameterizedStatement[] stmts, boolean tx, ReadConsistencyLevel lvl) throws RqliteException {
-        QueryRequest request;
+        QueryRequest request = QueryRequest.newBuilder()
+            .setStatements(Arrays.stream(stmts)
+                .map((s) -> Statement.newBuilder()
+                    .setSql(s.query)
+                    .setParameters(Arrays.stream(s.arguments)
+                        .map((a) -> Statement.Parameter.newBuilder()
+                            .setValue(a)
+                            .build())
+                        .toList())
+                    .build())
+                .toList())
+            .setTransaction(tx)
+            .setLevel(lvl)
+            .build();
+        return Query(request);
+    }
 
+    @Override
+    public QueryResults Query(QueryRequest query) throws RqliteException {
         try {
-            request = this.requestFactory.buildQueryRequest(stmts);
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-            return null;
-        }
-        request.enableTransaction(tx).setReadConsistencyLevel(lvl);
-
-        try {
-            return request.execute();
-        } catch (HttpResponseException responseException) {
-            return (QueryResults) this.tryOtherPeers(request, stmts);
+            RqliteHttpRequest request = this.requestFactory.buildQueryRequest(query);
+            HttpResponse response = request.execute();
+            return response.parseAs(QueryResults.class);
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            return (QueryResults) this.tryOtherPeers(request, stmts);
+            throw new RqliteException(e);
         }
     }
 

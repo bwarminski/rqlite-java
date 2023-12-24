@@ -4,6 +4,7 @@ import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
 import com.rqlite.dto.ParameterizedStatement;
 import com.rqlite.dto.Pong;
+import com.rqlite.dto.QueryRequest;
 import com.rqlite.dto.QueryResults;
 import com.rqlite.exceptions.RqliteException;
 
@@ -44,6 +45,8 @@ public interface Rqlite {
 
     /** Query executes multiple paramaterized statement that returns rows. */
     public QueryResults Query(ParameterizedStatement[] q, boolean tx, ReadConsistencyLevel lvl) throws RqliteException;
+
+    public QueryResults Query(QueryRequest query) throws RqliteException;
 
     /** Execute executes a single statement that does not return rows. */
     public ExecuteResults Execute(String q) throws RqliteException;

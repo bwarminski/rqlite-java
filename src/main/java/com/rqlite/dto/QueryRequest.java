@@ -3,21 +3,23 @@ package com.rqlite.dto;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ExecuteRequest implements StatementRequest {
+import com.rqlite.Rqlite.ReadConsistencyLevel;
+
+public class QueryRequest implements StatementRequest {
   private boolean timings;
-  private boolean transaction;
+  private ReadConsistencyLevel level;
+  private long freshness;
   private List<Statement> statements;
-  private boolean wait;
+  private boolean transaction;
   private boolean noRewriteRandom;
   private long timeout;
 
-  // TODO: do we care about redirect mode?
-
-  private ExecuteRequest(Builder builder) {
+  private QueryRequest(Builder builder) {
     setTimings(builder.timings);
-    setTransaction(builder.transaction);
+    setLevel(builder.level);
+    setFreshness(builder.freshness);
     setStatements(builder.statements);
-    setWait(builder.wait);
+    setTransaction(builder.transaction);
     setNoRewriteRandom(builder.noRewriteRandom);
     setTimeout(builder.timeout);
   }
@@ -26,12 +28,13 @@ public class ExecuteRequest implements StatementRequest {
     return new Builder();
   }
 
-  public static Builder newBuilder(ExecuteRequest copy) {
+  public static Builder newBuilder(QueryRequest copy) {
     Builder builder = new Builder();
     builder.timings = copy.getTimings();
-    builder.transaction = copy.getTransaction();
+    builder.level = copy.getLevel();
+    builder.freshness = copy.getFreshness();
     builder.statements = copy.getStatements();
-    builder.wait = copy.getWait();
+    builder.transaction = copy.getTransaction();
     builder.noRewriteRandom = copy.getNoRewriteRandom();
     builder.timeout = copy.getTimeout();
     return builder;
@@ -41,17 +44,26 @@ public class ExecuteRequest implements StatementRequest {
     return timings;
   }
 
-  public ExecuteRequest setTimings(boolean timings) {
+  public QueryRequest setTimings(boolean timings) {
     this.timings = timings;
     return this;
   }
 
-  public boolean getTransaction() {
-    return transaction;
+  public ReadConsistencyLevel getLevel() {
+    return level;
   }
 
-  public ExecuteRequest setTransaction(boolean transaction) {
-    this.transaction = transaction;
+  public QueryRequest setLevel(ReadConsistencyLevel level) {
+    this.level = level;
+    return this;
+  }
+
+  public long getFreshness() {
+    return freshness;
+  }
+
+  public QueryRequest setFreshness(long freshness) {
+    this.freshness = freshness;
     return this;
   }
 
@@ -59,17 +71,17 @@ public class ExecuteRequest implements StatementRequest {
     return statements;
   }
 
-  public ExecuteRequest setStatements(List<Statement> statements) {
+  public QueryRequest setStatements(List<Statement> statements) {
     this.statements = statements;
     return this;
   }
 
-  public boolean getWait() {
-    return wait;
+  public boolean getTransaction() {
+    return transaction;
   }
 
-  public ExecuteRequest setWait(boolean wait) {
-    this.wait = wait;
+  public QueryRequest setTransaction(boolean transaction) {
+    this.transaction = transaction;
     return this;
   }
 
@@ -77,7 +89,7 @@ public class ExecuteRequest implements StatementRequest {
     return noRewriteRandom;
   }
 
-  public ExecuteRequest setNoRewriteRandom(boolean noRewriteRandom) {
+  public QueryRequest setNoRewriteRandom(boolean noRewriteRandom) {
     this.noRewriteRandom = noRewriteRandom;
     return this;
   }
@@ -86,16 +98,18 @@ public class ExecuteRequest implements StatementRequest {
     return timeout;
   }
 
-  public ExecuteRequest setTimeout(long timeout) {
+  public QueryRequest setTimeout(long timeout) {
     this.timeout = timeout;
     return this;
   }
 
+
   public static final class Builder {
     private boolean timings;
-    private boolean transaction;
+    private ReadConsistencyLevel level;
+    private long freshness;
     private List<Statement> statements;
-    private boolean wait;
+    private boolean transaction;
     private boolean noRewriteRandom;
     private long timeout;
 
@@ -108,8 +122,13 @@ public class ExecuteRequest implements StatementRequest {
       return this;
     }
 
-    public Builder setTransaction(boolean val) {
-      transaction = val;
+    public Builder setLevel(ReadConsistencyLevel val) {
+      level = val;
+      return this;
+    }
+
+    public Builder setFreshness(long val) {
+      freshness = val;
       return this;
     }
 
@@ -118,8 +137,8 @@ public class ExecuteRequest implements StatementRequest {
       return this;
     }
 
-    public Builder setWait(boolean val) {
-      wait = val;
+    public Builder setTransaction(boolean val) {
+      transaction = val;
       return this;
     }
 
@@ -133,8 +152,8 @@ public class ExecuteRequest implements StatementRequest {
       return this;
     }
 
-    public ExecuteRequest build() {
-      return new ExecuteRequest(this);
+    public QueryRequest build() {
+      return new QueryRequest(this);
     }
   }
 }

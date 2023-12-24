@@ -6,39 +6,46 @@ import java.util.List;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.rqlite.Rqlite;
+import com.rqlite.Rqlite.ReadConsistencyLevel;
 import com.rqlite.dto.ExecuteRequest;
+import com.rqlite.dto.QueryRequest;
 import com.rqlite.dto.Statement;
 
 public class RequestFactoryTest {
     @Test
     public void testRequestFactoryQuery() throws IOException {
         RequestFactory factory = new RequestFactory("http", "localhost", 4001);
-        QueryRequest request = factory.buildQueryRequest(new String[] {});
+        QueryRequest.Builder builder = QueryRequest.newBuilder();
+        RqliteHttpRequest request = factory.buildQueryRequest(builder.build());
         Assert.assertEquals("http://localhost:4001/db/query", request.getUrl());
         Assert.assertEquals("POST", request.getMethod());
         Assert.assertEquals("[]", request.getBody());
 
-        request.enableTransaction(true);
+        builder.setTransaction(true);
+        request = factory.buildQueryRequest(builder.build());
         Assert.assertEquals("http://localhost:4001/db/query?transaction=true", request.getUrl());
 
-        request.enableTransaction(false);
+        builder.setTransaction(false);
+        request = factory.buildQueryRequest(builder.build());
         Assert.assertEquals("http://localhost:4001/db/query", request.getUrl());
 
-        request.setReadConsistencyLevel(Rqlite.ReadConsistencyLevel.STRONG);
+        builder.setLevel(ReadConsistencyLevel.STRONG);
+        request = factory.buildQueryRequest(builder.build());
         Assert.assertEquals("http://localhost:4001/db/query?level=strong", request.getUrl());
 
-        request.setReadConsistencyLevel(Rqlite.ReadConsistencyLevel.WEAK);
+        builder.setLevel(ReadConsistencyLevel.WEAK);
+        request = factory.buildQueryRequest(builder.build());
         Assert.assertEquals("http://localhost:4001/db/query?level=weak", request.getUrl());
 
-        request.setReadConsistencyLevel(Rqlite.ReadConsistencyLevel.NONE);
+        builder.setLevel(ReadConsistencyLevel.NONE);
+        request = factory.buildQueryRequest(builder.build());
         Assert.assertEquals("http://localhost:4001/db/query?level=none", request.getUrl());
     }
 
     @Test
     public void testRequestFactorQueryStatement() throws IOException {
         RequestFactory factory = new RequestFactory("http", "localhost", 4001);
-        QueryRequest request = factory.buildQueryRequest(new String[] { "SELECT * FROM foo" });
+        RqliteHttpRequest request = factory.buildQueryRequest(QueryRequest.newBuilder().setStatements(List.of(Statement.newBuilder().setSql("SELECT * FROM foo" ).build())).build());
         Assert.assertEquals("http://localhost:4001/db/query", request.getUrl());
         Assert.assertEquals("POST", request.getMethod());
         Assert.assertEquals("[\"SELECT * FROM foo\"]", request.getBody());
@@ -47,7 +54,11 @@ public class RequestFactoryTest {
     @Test
     public void testRequestFactorQueryStatementMulti() throws IOException {
         RequestFactory factory = new RequestFactory("http", "localhost", 4001);
-        QueryRequest request = factory.buildQueryRequest(new String[] { "SELECT * FROM foo", "SELECT * FROM bar" });
+        RqliteHttpRequest request = factory.buildQueryRequest(QueryRequest.newBuilder()
+            .setStatements(List.of(
+                Statement.newBuilder().setSql("SELECT * FROM foo").build(),
+                Statement.newBuilder().setSql("SELECT * FROM bar").build()
+            )).build());
         Assert.assertEquals("http://localhost:4001/db/query", request.getUrl());
         Assert.assertEquals("POST", request.getMethod());
         Assert.assertEquals("[\"SELECT * FROM foo\",\"SELECT * FROM bar\"]", request.getBody());

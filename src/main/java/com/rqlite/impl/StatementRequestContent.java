@@ -6,15 +6,15 @@ import java.io.OutputStream;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.google.api.client.http.AbstractHttpContent;
-import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.Statement;
 import com.rqlite.dto.Statement.Parameter;
+import com.rqlite.dto.StatementRequest;
 
-public class ExecuteRequestContent extends AbstractHttpContent {
+public class StatementRequestContent extends AbstractHttpContent {
   private static final JsonFactory JSON_FACTORY = new JsonFactory();
 
-  private final ExecuteRequest request;
-  public ExecuteRequestContent(ExecuteRequest request) {
+  private final StatementRequest request;
+  public StatementRequestContent(StatementRequest request) {
     super("application/json");
     this.request = request;
   }
@@ -30,6 +30,9 @@ public class ExecuteRequestContent extends AbstractHttpContent {
         if (s.getParameters().stream().anyMatch((p) -> p.getName().isPresent())) {
           json.writeStartObject();
           for (Parameter p : s.getParameters()) {
+            if (p.getName().isEmpty()) {
+              throw new IOException("Unable to serialize, one or more parameters have no name");
+            }
             json.writeObjectField(p.getName().get(), p.getValue());
           }
           json.writeEndObject();
