@@ -1,9 +1,11 @@
 package com.rqlite;
 
+import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
 import com.rqlite.dto.ParameterizedStatement;
 import com.rqlite.dto.Pong;
 import com.rqlite.dto.QueryResults;
+import com.rqlite.exceptions.RqliteException;
 
 public interface Rqlite {
 
@@ -32,29 +34,31 @@ public interface Rqlite {
     }
 
     /** Query executes a single statement that returns rows. */
-    public QueryResults Query(String q, ReadConsistencyLevel lvl) throws NodeUnavailableException;
+    public QueryResults Query(String q, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Query executes a single paramaterized statement that returns rows. */
-    public QueryResults Query(ParameterizedStatement q, ReadConsistencyLevel lvl) throws NodeUnavailableException;
+    public QueryResults Query(ParameterizedStatement q, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Query executes multiple statement that returns rows. */
-    public QueryResults Query(String[] q, boolean tx, ReadConsistencyLevel lvl) throws NodeUnavailableException;
+    public QueryResults Query(String[] q, boolean tx, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Query executes multiple paramaterized statement that returns rows. */
-    public QueryResults Query(ParameterizedStatement[] q, boolean tx, ReadConsistencyLevel lvl) throws NodeUnavailableException;
+    public QueryResults Query(ParameterizedStatement[] q, boolean tx, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Execute executes a single statement that does not return rows. */
-    public ExecuteResults Execute(String q) throws NodeUnavailableException;
+    public ExecuteResults Execute(String q) throws RqliteException;
 
     /** Execute executes a single paramaterized statement that does not return rows. */
-    public ExecuteResults Execute(ParameterizedStatement q) throws NodeUnavailableException;
+    public ExecuteResults Execute(ParameterizedStatement q) throws RqliteException;
 
     /** Execute executes multiple statement that do not return rows. */
-    public ExecuteResults Execute(String[] q, boolean tx) throws NodeUnavailableException;
+    public ExecuteResults Execute(String[] q, boolean tx) throws RqliteException;
 
     /** Execute executes multiple paramaterized statement that do not return rows. */
-    public ExecuteResults Execute(ParameterizedStatement[] q, boolean tx) throws NodeUnavailableException;
+    public ExecuteResults Execute(ParameterizedStatement[] q, boolean tx) throws RqliteException;
+
+    public ExecuteResults Execute(ExecuteRequest request, boolean queue) throws RqliteException;
 
     // Ping checks communication with the rqlite node. */
-    public Pong Ping();
+    public Pong Ping() throws RqliteException;
 }

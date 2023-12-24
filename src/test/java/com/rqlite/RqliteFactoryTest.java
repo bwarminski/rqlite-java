@@ -18,8 +18,13 @@ public class RqliteFactoryTest {
    @Test
    public void testCreateRqliteInstancePing() {
        Rqlite rqlite = RqliteFactory.connect("http", "localhost", 4001);
-      Pong pong = rqlite.Ping();
-      Assert.assertEquals(getRqliteVersion(), pong.version);
+     Pong pong = null;
+     try {
+       pong = rqlite.Ping();
+     } catch (com.rqlite.exceptions.RqliteException e) {
+       throw new RuntimeException(e);
+     }
+     Assert.assertEquals(getRqliteVersion(), pong.version);
    }
 
    private String getRqliteVersion() {

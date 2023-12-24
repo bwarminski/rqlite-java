@@ -5,22 +5,27 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.google.api.client.http.HttpResponse;
 import com.google.api.client.http.HttpResponseException;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
-import com.rqlite.NodeUnavailableException;
 import com.rqlite.Rqlite;
+import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
 import com.rqlite.dto.GenericResults;
 import com.rqlite.dto.ParameterizedStatement;
 import com.rqlite.dto.Pong;
 import com.rqlite.dto.QueryResults;
+import com.rqlite.dto.Statement;
+import com.rqlite.exceptions.NodeUnavailableException;
+import com.rqlite.exceptions.RqliteException;
 
 public class RqliteImpl implements Rqlite {
 
@@ -120,7 +125,7 @@ public class RqliteImpl implements Rqlite {
         throw new NodeUnavailableException("Could not connect to rqlite node.  Please check that the node is online and that your config files point to the correct address.");
     }
 
-    public QueryResults Query(String[] stmts, boolean tx, ReadConsistencyLevel lvl) throws NodeUnavailableException {
+    public QueryResults Query(String[] stmts, boolean tx, ReadConsistencyLevel lvl) throws RqliteException {
         QueryRequest request;
 
         try {
@@ -142,7 +147,7 @@ public class RqliteImpl implements Rqlite {
         }
     }
     @Override
-    public QueryResults Query(ParameterizedStatement[] stmts, boolean tx, ReadConsistencyLevel lvl) throws NodeUnavailableException {
+    public QueryResults Query(ParameterizedStatement[] stmts, boolean tx, ReadConsistencyLevel lvl) throws RqliteException {
         QueryRequest request;
 
         try {
@@ -164,68 +169,65 @@ public class RqliteImpl implements Rqlite {
         }
     }
 
-    public QueryResults Query(String s, ReadConsistencyLevel lvl) throws NodeUnavailableException {
+    public QueryResults Query(String s, ReadConsistencyLevel lvl) throws RqliteException {
         return this.Query(new String[] { s }, false, lvl);
     }
 
     @Override
-    public QueryResults Query(ParameterizedStatement q, ReadConsistencyLevel lvl) throws NodeUnavailableException {
+    public QueryResults Query(ParameterizedStatement q, ReadConsistencyLevel lvl) throws RqliteException {
         return this.Query(new ParameterizedStatement[] { q }, false, lvl);
     }
 
-    public ExecuteResults Execute(String[] stmts, boolean tx) throws NodeUnavailableException {
-        ExecuteRequest request;
-        try {
-            request = this.requestFactory.buildExecuteRequest(stmts);
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-            return null;
-        }
-        request.enableTransaction(tx);
-
-        try {
-            return request.execute();
-        } catch (HttpResponseException responseException) {
-            return (ExecuteResults) this.tryOtherPeers(request, stmts);
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            return (ExecuteResults) this.tryOtherPeers(request, stmts);
-        }
+    public ExecuteResults Execute(String[] stmts, boolean tx) throws RqliteException {
+        ExecuteRequest request = ExecuteRequest.newBuilder()
+            .setTimings(true)
+            .setStatements(Arrays.stream(stmts)
+                .map((s) -> Statement.newBuilder().setSql(s).build())
+                .toList())
+            .build();
+        return Execute(request, false);
     }
 
     @Override
-    public ExecuteResults Execute(ParameterizedStatement[] stmts, boolean tx) throws NodeUnavailableException {
-        ExecuteRequest request;
-        try {
-            request = this.requestFactory.buildExecuteRequest(stmts);
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-            return null;
-        }
-        request.enableTransaction(tx);
+    public ExecuteResults Execute(ParameterizedStatement[] stmts, boolean tx) throws RqliteException {
+        ExecuteRequest request = ExecuteRequest.newBuilder()
+            .setTimings(true)
+            .setTransaction(tx)
+            .setStatements(Arrays.stream(stmts)
+                .map((s) -> Statement.newBuilder()
+                    .setSql(s.query)
+                    .setParameters(Arrays.stream(s.arguments)
+                        .map((a) -> Statement.Parameter.newBuilder()
+                            .setValue(a)
+                            .build())
+                        .toList())
+                    .build())
+                .toList())
+            .build();
+        return Execute(request, false);
+    }
 
+    @Override
+    public ExecuteResults Execute(ExecuteRequest execute, boolean queued) throws RqliteException {
         try {
-            return request.execute();
-        } catch (HttpResponseException responseException) {
-            return (ExecuteResults) this.tryOtherPeers(request, stmts);
+            RqliteHttpRequest request = this.requestFactory.buildExecuteRequest(execute, queued);
+            HttpResponse response = request.execute();
+            return response.parseAs(ExecuteResults.class);
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            return (ExecuteResults) this.tryOtherPeers(request, stmts);
+            throw new RqliteException(e);
         }
     }
 
-    public ExecuteResults Execute(String s) throws NodeUnavailableException {
+    public ExecuteResults Execute(String s) throws RqliteException {
         return this.Execute(new String[] { s }, false);
     }
 
     @Override
-    public ExecuteResults Execute(ParameterizedStatement q) throws NodeUnavailableException {
+    public ExecuteResults Execute(ParameterizedStatement q) throws RqliteException {
         return this.Execute(new ParameterizedStatement[]{ q }, false);
     }
 
-    public Pong Ping() {
+    public Pong Ping() throws RqliteException {
         try {
             return this.requestFactory.buildPingRequest().execute();
         } catch (IOException e) {

@@ -1,17 +1,19 @@
 package com.rqlite;
 
-import com.rqlite.dto.ExecuteResults;
-import com.rqlite.dto.QueryResults;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.UUID;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.rqlite.dto.ExecuteResults;
+import com.rqlite.dto.QueryResults;
+import com.rqlite.exceptions.NodeUnavailableException;
 
 public class RqliteFailoverTest {
     String rqlitePath;

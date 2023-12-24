@@ -1,15 +1,21 @@
 package com.rqlite;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
 import com.rqlite.dto.ParameterizedStatement;
 import com.rqlite.dto.QueryResults;
+import com.rqlite.dto.Statement;
+import com.rqlite.dto.Statement.Parameter;
+import com.rqlite.exceptions.NodeUnavailableException;
 
 public class RqliteClientTest {
 
@@ -53,8 +59,22 @@ public class RqliteClientTest {
             Assert.assertEquals(1, results.results.length);
             Assert.assertNull(results.results[0].error);
             Assert.assertEquals(7, results.results[0].lastInsertId);
+
+            results = rqlite.Execute(ExecuteRequest.newBuilder().setStatements(List.of(Statement.newBuilder()
+                .setSql("INSERT INTO secret_agents(id, name, secret) VALUES(:id, :name, :secret)")
+                .setParameters(List.of(
+                    Parameter.newBuilder().setName(Optional.of("id")).setValue(8).build(),
+                    Parameter.newBuilder().setName(Optional.of("name")).setValue("bob").build(),
+                    Parameter.newBuilder().setName(Optional.of("secret")).build()
+                )).build())).build(), false);
+            Assert.assertNotNull(results);
+            Assert.assertEquals(1, results.results.length);
+            Assert.assertNull(results.results[0].error);
+            Assert.assertEquals(8, results.results[0].lastInsertId);
         } catch (NodeUnavailableException e) {
             Assert.fail("Failed because rqlite-java could not connect to the node.");
+        } catch (com.rqlite.exceptions.RqliteException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -96,6 +116,8 @@ public class RqliteClientTest {
             Assert.assertArrayEquals(new Object[]{"declan"}, rows.results[1].values[1]);
         } catch (NodeUnavailableException e) {
             Assert.fail("Failed because rqlite-java could not connect to the node.");
+        } catch (com.rqlite.exceptions.RqliteException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -116,6 +138,8 @@ public class RqliteClientTest {
             Assert.assertEquals("near \"more\": syntax error", rows.results[0].error);
         } catch (NodeUnavailableException e) {
             Assert.fail("Failed because rqlite-java could not connect to the node.");
+        } catch (com.rqlite.exceptions.RqliteException e) {
+            throw new RuntimeException(e);
         }
     }
 
