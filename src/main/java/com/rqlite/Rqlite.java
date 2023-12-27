@@ -1,11 +1,13 @@
 package com.rqlite;
 
+import com.rqlite.dto.ExecuteQueryRequest;
+import com.rqlite.dto.ExecuteQueryRequestResults;
 import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
-import com.rqlite.dto.ParameterizedStatement;
 import com.rqlite.dto.Pong;
 import com.rqlite.dto.QueryRequest;
 import com.rqlite.dto.QueryResults;
+import com.rqlite.dto.Statement;
 import com.rqlite.exceptions.RqliteException;
 
 public interface Rqlite {
@@ -38,13 +40,13 @@ public interface Rqlite {
     public QueryResults Query(String q, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Query executes a single paramaterized statement that returns rows. */
-    public QueryResults Query(ParameterizedStatement q, ReadConsistencyLevel lvl) throws RqliteException;
+    public QueryResults Query(Statement q, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Query executes multiple statement that returns rows. */
     public QueryResults Query(String[] q, boolean tx, ReadConsistencyLevel lvl) throws RqliteException;
 
     /** Query executes multiple paramaterized statement that returns rows. */
-    public QueryResults Query(ParameterizedStatement[] q, boolean tx, ReadConsistencyLevel lvl) throws RqliteException;
+    public QueryResults Query(Statement[] q, boolean tx, ReadConsistencyLevel lvl) throws RqliteException;
 
     public QueryResults Query(QueryRequest query) throws RqliteException;
 
@@ -52,15 +54,25 @@ public interface Rqlite {
     public ExecuteResults Execute(String q) throws RqliteException;
 
     /** Execute executes a single paramaterized statement that does not return rows. */
-    public ExecuteResults Execute(ParameterizedStatement q) throws RqliteException;
+    public ExecuteResults Execute(Statement q) throws RqliteException;
 
     /** Execute executes multiple statement that do not return rows. */
     public ExecuteResults Execute(String[] q, boolean tx) throws RqliteException;
 
     /** Execute executes multiple paramaterized statement that do not return rows. */
-    public ExecuteResults Execute(ParameterizedStatement[] q, boolean tx) throws RqliteException;
+    public ExecuteResults Execute(Statement[] q, boolean tx) throws RqliteException;
 
     public ExecuteResults Execute(ExecuteRequest request, boolean queue) throws RqliteException;
+
+    public ExecuteQueryRequestResults Request(ExecuteQueryRequest request) throws RqliteException;
+
+    public ExecuteQueryRequestResults Request(String q) throws RqliteException;
+
+    public ExecuteQueryRequestResults Request(Statement q) throws RqliteException;
+
+    public ExecuteQueryRequestResults Request(String[] q, boolean tx) throws RqliteException;
+
+    public ExecuteQueryRequestResults Request(Statement[] q, boolean tx) throws RqliteException;
 
     // Ping checks communication with the rqlite node. */
     public Pong Ping() throws RqliteException;

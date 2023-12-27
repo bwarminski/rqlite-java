@@ -53,6 +53,9 @@ public class Statement {
     Optional<String> name;
     Object value;
 
+    public static Parameter unnamed(Object value) {
+      return new Parameter(Optional.empty(), value);
+    }
     public Parameter(Optional<String> name, Object value) {
       this.name = name;
       this.value = value;

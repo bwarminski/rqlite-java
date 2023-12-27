@@ -8,7 +8,6 @@ import java.util.List;
 import com.google.api.client.http.GenericUrl;
 import com.google.api.client.http.HttpRequest;
 import com.google.api.client.http.HttpResponse;
-import com.rqlite.dto.Peer;
 import com.rqlite.exceptions.HttpException;
 import com.rqlite.exceptions.MultiHttpException;
 import com.rqlite.exceptions.RqliteException;
@@ -18,10 +17,10 @@ import com.rqlite.exceptions.RqliteException;
  * peers
  */
 public class RqliteHttpRequest {
-  private final List<Peer> peers;
+  private final List<RqliteNode> peers;
   protected final HttpRequest request;
 
-  public RqliteHttpRequest(List<Peer> peers,  HttpRequest request) {
+  public RqliteHttpRequest(List<RqliteNode> peers,  HttpRequest request) {
     this.peers = peers;
     this.request = request;
   }
@@ -35,9 +34,10 @@ public class RqliteHttpRequest {
     List<HttpException> exceptions = new ArrayList<>();
 
     // TODO: Original implementation includes a deadline, loops and performs backoff
-    for (Peer peer: peers) {
+    for (RqliteNode peer: peers) {
       try {
         GenericUrl url = request.getUrl();
+        url.setScheme(peer.proto);
         url.setHost(peer.host);
         url.setPort(peer.port);
         HttpResponse response = request.execute();

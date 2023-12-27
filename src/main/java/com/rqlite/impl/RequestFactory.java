@@ -12,8 +12,8 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.JsonObjectParser;
 import com.google.api.client.json.jackson2.JacksonFactory;
+import com.rqlite.dto.ExecuteQueryRequest;
 import com.rqlite.dto.ExecuteRequest;
-import com.rqlite.dto.Peer;
 
 public class RequestFactory {
     static final HttpTransport HTTP_TRANSPORT = new NetHttpTransport();
@@ -28,18 +28,22 @@ public class RequestFactory {
     private GenericUrl executeUrl;
     private GenericUrl queryUrl;
     private GenericUrl statusUrl;
+    private GenericUrl requestUrl;
 
-    private List<Peer> peers;
+    private List<RqliteNode> peers;
 
     public RequestFactory(final String proto, final String host, final Integer port) {
+        this(proto,host,port,List.of(new RqliteNode(proto, host,port)));
+    }
+    public RequestFactory(final String proto, final String host, final Integer port, final List<RqliteNode> peers) {
         this.proto = proto;
         this.host = host;
         this.port = port;
-        this.peers = List.of(new Peer(host, port));
-
+        this.peers = peers;
         this.executeUrl = new GenericUrl(String.format("%s://%s:%d/db/execute", this.proto, this.host, this.port));
         this.queryUrl = new GenericUrl(String.format("%s://%s:%d/db/query", this.proto, this.host, this.port));
         this.statusUrl = new GenericUrl(String.format("%s://%s:%d/status", this.proto, this.host, this.port));
+        this.requestUrl = new GenericUrl(String.format("%s://%s:%d/db/request", this.proto, this.host, this.port));
 
         this.requestFactory = HTTP_TRANSPORT.createRequestFactory(new HttpRequestInitializer() {
             public void initialize(HttpRequest request) {
@@ -89,6 +93,26 @@ public class RequestFactory {
         }
         if (request.getLevel() != null) {
             url.set("level", request.getLevel().toString().toLowerCase());
+        }
+
+        HttpRequest httpRequest = this.requestFactory.buildPostRequest(url, new StatementRequestContent(request));
+
+        return new RqliteHttpRequest(peers, httpRequest);
+    }
+
+    public RqliteHttpRequest buildExecuteQueryRequest(ExecuteQueryRequest request) throws IOException {
+        GenericUrl url = this.requestUrl.clone();
+        if (request.getTimings()) {
+            url.set("timings","true");
+        }
+        if (request.getTransaction()) {
+            url.set("transaction", "true");
+        }
+        if (request.getNoRewriteRandom()) {
+            url.set("norwrandom", "true");
+        }
+        if (request.getTimeout() > 0) {
+            url.set("timeout", request.getTimeout());
         }
 
         HttpRequest httpRequest = this.requestFactory.buildPostRequest(url, new StatementRequestContent(request));
