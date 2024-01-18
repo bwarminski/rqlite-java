@@ -13,6 +13,8 @@ import java.sql.Statement;
 public class RqliteStatement implements Statement {
   private final RqliteConnection conn;
   private boolean closed = true;
+  private int maxRows = 0;
+  private int queryTimeOutSec = 0;
 
   public RqliteStatement(RqliteConnection rqliteConnection) {
     this.conn = rqliteConnection;
@@ -44,18 +46,7 @@ public class RqliteStatement implements Statement {
   public ResultSet executeQuery(String sql) throws SQLException {
     checkOpen();
     checkSQLNullOrEmpty(sql);
-
-    // This is weird.
-    if (conn.isInTransaction()) {
-      // If in a transaction
-      // If any result has been accessed, error
-      // Else buffer query
-    } else {
-
-    }
-
-    // If not in a transaction, send the query
-    return null;
+    return conn.query(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
   }
 
   /**
@@ -82,7 +73,9 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int executeUpdate(String sql) throws SQLException {
-    return 0;
+    checkOpen();
+    checkSQLNullOrEmpty(sql);
+    return conn.execute(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
   }
 
   /**
@@ -104,7 +97,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void close() throws SQLException {
-
+    // TODO: Close current result set
   }
 
   /**
@@ -125,7 +118,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getMaxFieldSize() throws SQLException {
-    return 0;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported"); // TODO: We maybe could support this
   }
 
   /**
@@ -149,7 +142,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setMaxFieldSize(int max) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -167,7 +160,8 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getMaxRows() throws SQLException {
-    return 0;
+    checkOpen();
+    return maxRows;
   }
 
   /**
@@ -185,7 +179,9 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setMaxRows(int max) throws SQLException {
-
+    checkOpen();
+    if (max < 0) throw new SQLException("Attempt to set max rows less than 0");
+    maxRows = max;
   }
 
   /**
@@ -212,7 +208,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setEscapeProcessing(boolean enable) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -229,7 +225,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getQueryTimeout() throws SQLException {
-    return 0;
+    return queryTimeOutSec;
   }
 
   /**
@@ -260,7 +256,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setQueryTimeout(int seconds) throws SQLException {
-
+    queryTimeOutSec = seconds;
   }
 
   /**
@@ -276,7 +272,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void cancel() throws SQLException {
-
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -301,6 +297,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public SQLWarning getWarnings() throws SQLException {
+    checkOpen();
     return null;
   }
 
@@ -382,7 +379,9 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean execute(String sql) throws SQLException {
-    return false;
+    checkOpen();
+    checkSQLNullOrEmpty(sql);
+    return conn.request(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
   }
 
   /**

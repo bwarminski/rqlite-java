@@ -3,16 +3,22 @@ package com.rqlite.jdbc;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.rqlite.Rqlite;
+import com.rqlite.Rqlite.ReadConsistencyLevel;
+
 public class RqliteJDBCUrl {
   public static final String URL_PATTERN = "^jdbc:rqlite://([^:/]+):(\\d+)(\\?.*)?$";
+  public static final ReadConsistencyLevel DEFAULT_CONSISTENCY = ReadConsistencyLevel.WEAK;
 
   private final String proto;
   private final String host;
   private final int port;
+  private final Rqlite.ReadConsistencyLevel level;
 
   public static RqliteJDBCUrl parse(String url, Properties info) throws SQLException {
     // jdbc:rqlite://host:port?
@@ -37,6 +43,7 @@ public class RqliteJDBCUrl {
     }
 
     boolean useSSL = false;
+    ReadConsistencyLevel level = DEFAULT_CONSISTENCY;
     String queryParams = matcher.group(3);
     if (queryParams != null) {
       Map<String, String> params = parseQueryParams(queryParams);
@@ -47,9 +54,21 @@ public class RqliteJDBCUrl {
       if ("true".equalsIgnoreCase(sslValue)) {
         useSSL = true;
       }
+
+      String levelValue = info.getProperty("level");
+      if (levelValue == null) {
+        levelValue = params.get("level");
+      }
+      if (levelValue != null) {
+        Optional<ReadConsistencyLevel> maybeLevel = ReadConsistencyLevel.fromValue(levelValue);
+        if (maybeLevel.isEmpty()) {
+          throw new SQLException("Unknown rqlite consistency level " + levelValue);
+        }
+        level = maybeLevel.get();
+      }
     }
 
-    return new RqliteJDBCUrl(useSSL ? "https" : "http", host, port);
+    return new RqliteJDBCUrl(useSSL ? "https" : "http", host, port, level);
   }
 
   private static Map<String, String> parseQueryParams(String queryParams) {
@@ -62,10 +81,11 @@ public class RqliteJDBCUrl {
     return params;
   }
 
-  public RqliteJDBCUrl(String proto, String host, int port) {
+  public RqliteJDBCUrl(String proto, String host, int port, ReadConsistencyLevel level) {
     this.proto = proto;
     this.host = host;
     this.port = port;
+    this.level = level;
   }
 
   public String getProto() {
@@ -78,5 +98,9 @@ public class RqliteJDBCUrl {
 
   public int getPort() {
     return port;
+  }
+
+  public ReadConsistencyLevel getLevel() {
+    return level;
   }
 }

@@ -17,22 +17,65 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import com.rqlite.Rqlite;
+import com.rqlite.Rqlite.ReadConsistencyLevel;
+import com.rqlite.dto.ExecuteQueryRequest;
+import com.rqlite.dto.ExecuteQueryRequestResults;
+import com.rqlite.dto.ExecuteRequest;
+import com.rqlite.dto.ExecuteResults;
+import com.rqlite.dto.QueryRequest;
+import com.rqlite.dto.QueryResults;
+import com.rqlite.exceptions.RqliteException;
 import com.rqlite.impl.RqliteImpl;
 
 public class RqliteConnection implements Connection {
+  private static final String RESULT_COUNT_MISMATCH = "Result count mismatch";
   private final Rqlite rqlite;
-  private boolean closed = true;
-  private boolean inTransaction = false;
+  private boolean closed;
+
+  private ReadConsistencyLevel level;
+
+  private List<PendingStatement> pendingStatements = new ArrayList<>();
+
+  private int pendingReads = 0;
+  private int pendingWrites = 0;
+
+  private boolean autoCommit;
 
   public RqliteConnection(String url, Properties info) throws SQLException {
     RqliteJDBCUrl jdbcUrl = RqliteJDBCUrl.parse(url, info);
     this.rqlite = new RqliteImpl(jdbcUrl.getProto(), jdbcUrl.getHost(), jdbcUrl.getPort());
     this.closed = false;
+    this.level = jdbcUrl.getLevel();
+    this.autoCommit = true;
+  }
+
+  private static class PendingStatement {
+    PendingStatementType statementType;
+    com.rqlite.dto.Statement statement;
+    CompletableFuture<QueryResults.Result> future;
+
+    PendingStatement(com.rqlite.dto.Statement statement, PendingStatementType statementType) {
+      this.statement = statement;
+      this.statementType = statementType;
+      if (statementType != PendingStatementType.EXECUTE) {
+        this.future = new CompletableFuture<>();
+      }
+    }
+  }
+
+  private static enum PendingStatementType {
+    QUERY,
+    EXECUTE,
+    REQUEST
   }
 
   /**
@@ -1545,7 +1588,105 @@ public class RqliteConnection implements Connection {
     }
   }
 
-  protected boolean isInTransaction() {
-    return this.inTransaction;
+  boolean isInTransaction() {
+    return !autoCommit && !pendingStatements.isEmpty();
+  }
+
+  ReadConsistencyLevel getLevel() {
+    return this.level;
+  }
+
+  void setLevel(ReadConsistencyLevel level) {
+    if (level == null) {
+      throw new RuntimeException("consistency level must not be null");
+    }
+    this.level = level;
+  }
+
+  ResultSet query(com.rqlite.dto.Statement statement, RqliteStatement sqlStatement) throws SQLException {
+    checkOpen();
+
+    try {
+      if (autoCommit) {
+        // TODO Handle freshness
+        QueryResults results = rqlite.Query(QueryRequest.newBuilder()
+            .setLevel(level)
+            .setStatements(List.of(statement))
+            .setTransaction(false)
+            .setTimeout(TimeUnit.SECONDS.toMillis(sqlStatement.getQueryTimeout())) // TODO: We need to clarify the unit in the driver
+            .build());
+        if (results.results == null || results.results.length != 1) {
+          throw new SQLException(RESULT_COUNT_MISMATCH);
+        }
+        if (results.results[0].error != null) {
+          throw new SQLException(results.results[0].error);
+        }
+        return new RqliteResultSet(CompletableFuture.completedFuture(results.results[0]), sqlStatement);
+      } else {
+        PendingStatement pendingStatement = new PendingStatement(statement, PendingStatementType.QUERY);
+        pendingStatements.add(pendingStatement);
+        pendingReads++;
+        return new RqliteResultSet(pendingStatement.future, sqlStatement);
+      }
+    } catch (RqliteException e) {
+      throw new SQLException(e);
+    }
+  }
+
+  int execute(com.rqlite.dto.Statement statement, RqliteStatement sqlStatement) throws SQLException {
+    checkOpen();
+    try {
+      if (autoCommit) {
+        ExecuteResults results = rqlite.Execute(
+            ExecuteRequest.newBuilder()
+                .setStatements(List.of(statement))
+                .setTransaction(false)
+                .setTimeout(TimeUnit.SECONDS.toMillis(sqlStatement.getQueryTimeout())) // TODO: We need to clarify the unit in the driver
+                .build(),
+            false
+        );
+        if (results == null || results.results == null || results.results.length < 1) {
+          throw new SQLException(RESULT_COUNT_MISMATCH);
+        }
+        if (results.results[0].error != null) {
+          throw new SQLException(results.results[0].error);
+        }
+        return results.results[0].rowsAffected;
+      } else {
+        pendingStatements.add(new PendingStatement(statement, PendingStatementType.EXECUTE));
+        pendingWrites++;
+        return 0; // TODO: This default value is dangerous if client libraries depend on it. Idea - support a "strict mode" where we optionally throw an exception
+      }
+    } catch (RqliteException e) {
+      throw new SQLException(e);
+    }
+  }
+
+  boolean request(com.rqlite.dto.Statement statement, RqliteStatement sqlStatement) throws SQLException {
+    checkOpen();
+    try {
+      if (autoCommit) {
+        ExecuteQueryRequestResults results = rqlite.Request(
+            ExecuteQueryRequest.newBuilder()
+                .setStatements(List.of(statement))
+                .setTransaction(false)
+                .setTimeout(TimeUnit.SECONDS.toMillis(sqlStatement.getQueryTimeout())) // TODO: We need to clarify the unit in the driver
+                .build()
+        );
+        if (results == null || results.results == null || results.results.length < 1) {
+          throw new SQLException(RESULT_COUNT_MISMATCH);
+        }
+        if (results.results[0].error != null) {
+          throw new SQLException(results.results[0].error);
+        }
+        return results.results[0].columns != null;
+      } else {
+        pendingStatements.add(new PendingStatement(statement, PendingStatementType.REQUEST));
+        pendingWrites++;
+        return true; // TODO: This default value is dangerous if client libraries depend on it. Idea - support a "strict mode" where we optionally throw an exception
+      }
+    } catch (RqliteException e) {
+      throw new SQLException(e);
+    }
   }
 }

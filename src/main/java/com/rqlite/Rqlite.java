@@ -1,5 +1,9 @@
 package com.rqlite;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+
 import com.rqlite.dto.ExecuteQueryRequest;
 import com.rqlite.dto.ExecuteQueryRequestResults;
 import com.rqlite.dto.ExecuteRequest;
@@ -27,12 +31,23 @@ public interface Rqlite {
 
         private final String value;
 
+        private static final Map<String, ReadConsistencyLevel> BY_VALUE = new HashMap<>();
+
+        static {
+            for (ReadConsistencyLevel e : values()) {
+                BY_VALUE.put(e.value, e);
+            }
+        }
         private ReadConsistencyLevel(final String value) {
             this.value = value;
         }
 
         public String value() {
             return this.value;
+        }
+
+        public static Optional<ReadConsistencyLevel> fromValue(String value) {
+            return Optional.ofNullable(BY_VALUE.get(value));
         }
     }
 

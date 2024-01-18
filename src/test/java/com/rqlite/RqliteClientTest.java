@@ -9,6 +9,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.rqlite.Rqlite.ReadConsistencyLevel;
 import com.rqlite.dto.ExecuteQueryRequestResults;
 import com.rqlite.dto.ExecuteRequest;
 import com.rqlite.dto.ExecuteResults;
@@ -16,6 +17,8 @@ import com.rqlite.dto.QueryResults;
 import com.rqlite.dto.Statement;
 import com.rqlite.dto.Statement.Parameter;
 import com.rqlite.exceptions.NodeUnavailableException;
+import com.rqlite.exceptions.RqliteException;
+import com.rqlite.jdbc.RqliteResultSet;
 
 public class RqliteClientTest {
 
@@ -174,11 +177,40 @@ public class RqliteClientTest {
         }
     }
 
+    @Test public void testDataTypeHandling() throws RqliteException {
+        QueryResults rows;
+
+        rqlite.Execute("CREATE TABLE test_types (id INTEGER PRIMARY KEY, int_column INTEGER, real_column REAL, text_column TEXT, blob_column BLOB, date_column TEXT, boolean_column INTEGER, decimal_column DECIMAL(10,5));");
+        rqlite.Execute("""
+            INSERT INTO test_types (int_column, real_column, text_column, blob_column, date_column, boolean_column, decimal_column)
+            VALUES
+                (42, 3.14159, 'Hello, World!', x'53514C697465', '2021-09-01', 1, 2.5),
+                (-42, -3.14159, 'Another Text', x'424C4F42', '2021-12-31', 0, -3.115),
+                (NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+            """);
+        rows = rqlite.Query("select int_column, real_column, text_column, blob_column, date_column, boolean_column,  boolean_column as test, decimal_column from test_types", ReadConsistencyLevel.NONE);
+        Assert.assertNotNull(rows);
+        Assert.assertNull(rows.results[0].error);
+
+        Object value = rows.results[0].values[0][3]; // should be base64
+        Assert.assertNotNull(value);
+        byte[] bytes = RqliteResultSet.base64Decode(value.toString());
+        String sVal = new String(bytes);
+        Assert.assertEquals("SQLite", sVal);
+
+        value = rows.results[0].values[0][0];
+        Assert.assertNotNull(value);
+        Assert.assertEquals("42", String.valueOf(value));
+
+
+    }
+
     @After
     public void after() throws Exception {
         Rqlite rqlite = RqliteFactory.connect("http", "localhost", 4001);
         rqlite.Execute("DROP TABLE foo");
         rqlite.Execute("DROP TABLE bar");
         rqlite.Execute("DROP TABLE secret_agents");
+        rqlite.Execute("DROP TABLE test_types");
     }
 }
