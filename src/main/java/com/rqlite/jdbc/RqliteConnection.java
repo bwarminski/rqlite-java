@@ -17,11 +17,9 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
@@ -42,12 +40,6 @@ public class RqliteConnection implements Connection {
   private boolean closed;
 
   private ReadConsistencyLevel level;
-
-  private List<PendingStatement> pendingStatements = new ArrayList<>();
-
-  private int pendingReads = 0;
-  private int pendingWrites = 0;
-
   private boolean autoCommit;
 
   public RqliteConnection(String url, Properties info) throws SQLException {
@@ -56,26 +48,6 @@ public class RqliteConnection implements Connection {
     this.closed = false;
     this.level = jdbcUrl.getLevel();
     this.autoCommit = true;
-  }
-
-  private static class PendingStatement {
-    PendingStatementType statementType;
-    com.rqlite.dto.Statement statement;
-    CompletableFuture<QueryResults.Result> future;
-
-    PendingStatement(com.rqlite.dto.Statement statement, PendingStatementType statementType) {
-      this.statement = statement;
-      this.statementType = statementType;
-      if (statementType != PendingStatementType.EXECUTE) {
-        this.future = new CompletableFuture<>();
-      }
-    }
-  }
-
-  private static enum PendingStatementType {
-    QUERY,
-    EXECUTE,
-    REQUEST
   }
 
   /**
@@ -1588,10 +1560,6 @@ public class RqliteConnection implements Connection {
     }
   }
 
-  boolean isInTransaction() {
-    return !autoCommit && !pendingStatements.isEmpty();
-  }
-
   ReadConsistencyLevel getLevel() {
     return this.level;
   }
@@ -1621,12 +1589,9 @@ public class RqliteConnection implements Connection {
         if (results.results[0].error != null) {
           throw new SQLException(results.results[0].error);
         }
-        return new RqliteResultSet(CompletableFuture.completedFuture(results.results[0]), sqlStatement);
+        return new RqliteResultSet(results.results[0], sqlStatement);
       } else {
-        PendingStatement pendingStatement = new PendingStatement(statement, PendingStatementType.QUERY);
-        pendingStatements.add(pendingStatement);
-        pendingReads++;
-        return new RqliteResultSet(pendingStatement.future, sqlStatement);
+        throw new SQLFeatureNotSupportedException("Transactions are not supported by this driver");
       }
     } catch (RqliteException e) {
       throw new SQLException(e);
@@ -1653,9 +1618,7 @@ public class RqliteConnection implements Connection {
         }
         return results.results[0].rowsAffected;
       } else {
-        pendingStatements.add(new PendingStatement(statement, PendingStatementType.EXECUTE));
-        pendingWrites++;
-        return 0; // TODO: This default value is dangerous if client libraries depend on it. Idea - support a "strict mode" where we optionally throw an exception
+        throw new SQLFeatureNotSupportedException("Transactions are not supported by this driver");
       }
     } catch (RqliteException e) {
       throw new SQLException(e);
@@ -1681,9 +1644,7 @@ public class RqliteConnection implements Connection {
         }
         return results.results[0].columns != null;
       } else {
-        pendingStatements.add(new PendingStatement(statement, PendingStatementType.REQUEST));
-        pendingWrites++;
-        return true; // TODO: This default value is dangerous if client libraries depend on it. Idea - support a "strict mode" where we optionally throw an exception
+        throw new SQLFeatureNotSupportedException("Transactions are not supported by this driver");
       }
     } catch (RqliteException e) {
       throw new SQLException(e);

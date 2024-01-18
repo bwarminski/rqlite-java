@@ -33,8 +33,6 @@ import java.util.Base64;
 import java.util.Calendar;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 import javax.sql.rowset.serial.SerialBlob;
 import javax.sql.rowset.serial.SerialClob;
@@ -44,7 +42,8 @@ import com.rqlite.dto.QueryResults.Result;
 
 public class RqliteResultSet implements ResultSet {
   public static final String SQL_FEATURE_NOT_SUPPORTED = "SQL Feature Not Supported";
-  private Future<QueryResults.Result> future;
+
+  private QueryResults.Result result;
   private int cursor;
   private boolean closed;
   boolean lastWasNull;
@@ -53,8 +52,8 @@ public class RqliteResultSet implements ResultSet {
 
   private final RqliteStatement statement;
 
-  public RqliteResultSet(Future<Result> future, RqliteStatement statement) throws SQLException {
-    this.future = future;
+  public RqliteResultSet(Result result, RqliteStatement statement) throws SQLException {
+    this.result = result;
     this.cursor = -1;
     this.closed = false;
     if (statement != null) {
@@ -96,12 +95,11 @@ public class RqliteResultSet implements ResultSet {
   @Override
   public boolean next() throws SQLException {
     checkOpen();
-    checkComplete();
     if (this.maxRows > 0 && cursor >= this.maxRows) {
       return false;
     }
     cursor++;
-    return cursor < checkedResults().values.length;
+    return cursor < result.values.length;
   }
 
   /**
@@ -133,7 +131,7 @@ public class RqliteResultSet implements ResultSet {
   @Override
   public void close() throws SQLException {
     this.closed = true;
-    this.future = null;
+    this.result = null;
   }
 
   /**
@@ -172,10 +170,11 @@ public class RqliteResultSet implements ResultSet {
   public String getString(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
 
     if ("blob".equals(result.types[columnIndex-1])) {
       byte[] bytes = base64Decode(value.toString());
@@ -185,7 +184,7 @@ public class RqliteResultSet implements ResultSet {
     }
   }
 
-  private Object getColumnValue(int columnIndex, Result result) throws SQLException {
+  private Object getColumnValue(int columnIndex) throws SQLException {
     if (columnIndex < 1 || columnIndex > result.types.length) {
       throw new SQLException("Invalid Column Index: " + columnIndex);
     }
@@ -220,10 +219,11 @@ public class RqliteResultSet implements ResultSet {
   public boolean getBoolean(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return false;
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return false;
+    }
 
     if ("blob".equals(result.types[columnIndex-1])) {
       return byteArrayToBoolean(base64Decode(value.toString()));
@@ -275,10 +275,11 @@ public class RqliteResultSet implements ResultSet {
   public byte getByte(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return 0;
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return 0;
+    }
 
     byte bValue;
     String byteString = this.getString(columnIndex);
@@ -306,10 +307,12 @@ public class RqliteResultSet implements ResultSet {
   public short getShort(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return 0;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return 0;
+    }
 
     if (value instanceof BigDecimal) {
       return ((BigDecimal) value).shortValue();
@@ -343,10 +346,12 @@ public class RqliteResultSet implements ResultSet {
   public int getInt(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return 0;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return 0;
+    }
 
     if (value instanceof BigDecimal) {
       return ((BigDecimal) value).intValue();
@@ -379,10 +384,12 @@ public class RqliteResultSet implements ResultSet {
   public long getLong(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return 0;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return 0;
+    }
 
     if (value instanceof BigDecimal) {
       return ((BigDecimal) value).longValue();
@@ -416,10 +423,12 @@ public class RqliteResultSet implements ResultSet {
   public float getFloat(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return 0;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return 0;
+    }
 
     if (value instanceof BigDecimal) {
       return ((BigDecimal) value).floatValue();
@@ -453,10 +462,12 @@ public class RqliteResultSet implements ResultSet {
   public double getDouble(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return 0;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return 0;
+    }
 
     if (value instanceof BigDecimal) {
       return ((BigDecimal) value).doubleValue();
@@ -494,10 +505,12 @@ public class RqliteResultSet implements ResultSet {
   public BigDecimal getBigDecimal(int columnIndex, int scale) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
 
     BigDecimal bdValue;
     if (value instanceof BigDecimal) {
@@ -534,10 +547,12 @@ public class RqliteResultSet implements ResultSet {
   public byte[] getBytes(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
 
     if ("blob".equals(result.types[columnIndex-1])) {
       return base64Decode(value.toString());
@@ -570,10 +585,12 @@ public class RqliteResultSet implements ResultSet {
   public Date getDate(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
 
     String dateString = this.getString(columnIndex);
     try {
@@ -600,10 +617,12 @@ public class RqliteResultSet implements ResultSet {
   public Time getTime(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
 
     String dateString = this.getString(columnIndex);
     try {
@@ -630,10 +649,12 @@ public class RqliteResultSet implements ResultSet {
   public Timestamp getTimestamp(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
 
     String dateString = this.getString(columnIndex);
     try {
@@ -737,7 +758,9 @@ public class RqliteResultSet implements ResultSet {
   @Override
   public InputStream getBinaryStream(int columnIndex) throws SQLException {
     byte[] value = getBytes(columnIndex);
-    if (value == null) return null;
+    if (value == null) {
+      return null;
+    }
     return new ByteArrayInputStream(value);
   }
 
@@ -1167,7 +1190,7 @@ public class RqliteResultSet implements ResultSet {
   public ResultSetMetaData getMetaData() throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
+
     return new RqliteResultSetMetaData(this, result);
   }
 
@@ -1213,9 +1236,9 @@ public class RqliteResultSet implements ResultSet {
   public Object getObject(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    return getColumnValue(columnIndex, result);
+
+    return getColumnValue(columnIndex);
   }
 
   /**
@@ -1266,7 +1289,7 @@ public class RqliteResultSet implements ResultSet {
   public int findColumn(String columnLabel) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
+
 
     for (int i = 0; i < result.columns.length; i++) {
       String column = result.columns[i];
@@ -1338,10 +1361,12 @@ public class RqliteResultSet implements ResultSet {
   public BigDecimal getBigDecimal(int columnIndex) throws SQLException {
     checkOpen();
     checkCursorValid();
-    Result result = checkedResults();
 
-    Object value = getColumnValue(columnIndex, result);
-    if (value == null) return null;
+
+    Object value = getColumnValue(columnIndex);
+    if (value == null) {
+      return null;
+    }
     
     if (value instanceof BigDecimal) {
       return ((BigDecimal) value);
@@ -1441,7 +1466,6 @@ public class RqliteResultSet implements ResultSet {
   @Override
   public boolean isFirst() throws SQLException {
     checkOpen();
-    checkComplete();
     return cursor == 0;
   }
 
@@ -3043,7 +3067,9 @@ public class RqliteResultSet implements ResultSet {
   @Override
   public Clob getClob(int columnIndex) throws SQLException {
     String str = getString(columnIndex);
-    if (str == null) return null;
+    if (str == null) {
+      return null;
+    }
     return new SerialClob(str.toCharArray());
   }
 
@@ -4963,27 +4989,13 @@ public class RqliteResultSet implements ResultSet {
     }
   }
 
-  private void checkComplete() throws SQLException {
-    if (!this.future.isDone()) {
-      throw new SQLException("Attempted to access result set before transaction complete");
-    }
-  }
-
   private void checkCursorValid() throws SQLException {
-    if (this.cursor < 0 || this.closed || !this.future.isDone()) {
+    if (this.cursor < 0 || this.closed) {
       throw new SQLException("Attempted operation at invalid cursor position");
     }
-    QueryResults.Result results = checkedResults();
-    if (results.values == null || cursor >= results.values.length || cursor >= maxRows) {
-      throw new SQLException("Attempted operation at invalid cursor position");
-    }
-  }
 
-  private QueryResults.Result checkedResults() throws SQLException {
-    try {
-      return this.future.get();
-    } catch (InterruptedException | ExecutionException e) {
-      throw new SQLException(e);
+    if (result.values == null || cursor >= result.values.length || cursor >= maxRows) {
+      throw new SQLException("Attempted operation at invalid cursor position");
     }
   }
 
