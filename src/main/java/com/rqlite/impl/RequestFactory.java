@@ -70,7 +70,7 @@ public class RequestFactory {
             url.set("norwrandom", "true");
         }
         if (request.getTimeout() > 0) {
-            url.set("timeout", request.getTimeout());
+            url.set("timeout", request.getTimeout() + "ms");
         }
         HttpRequest httpRequest = this.requestFactory.buildPostRequest(url, new StatementRequestContent(request));
 
@@ -89,7 +89,7 @@ public class RequestFactory {
             url.set("norwrandom", "true");
         }
         if (request.getTimeout() > 0) {
-            url.set("timeout", request.getTimeout());
+            url.set("timeout", request.getTimeout() + "ms");
         }
         if (request.getLevel() != null) {
             url.set("level", request.getLevel().toString().toLowerCase());
@@ -112,7 +112,7 @@ public class RequestFactory {
             url.set("norwrandom", "true");
         }
         if (request.getTimeout() > 0) {
-            url.set("timeout", request.getTimeout());
+            url.set("timeout", request.getTimeout() + "ms");
         }
 
         HttpRequest httpRequest = this.requestFactory.buildPostRequest(url, new StatementRequestContent(request));

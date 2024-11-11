@@ -1,8 +1,10 @@
 package com.rqlite.jdbc;
 
+import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
@@ -102,5 +104,25 @@ public class RqliteJDBCUrl {
 
   public ReadConsistencyLevel getLevel() {
     return level;
+  }
+
+  @Override
+  public String toString() {
+    String sb = "jdbc:rqlite://" + host +
+        ":" +
+        port + "?useSSL=" + (Objects.equals(proto, "https")) + "&level=" + level.toString();
+    return sb;
+  }
+
+  public DriverPropertyInfo[] getPropertyInfo() {
+    DriverPropertyInfo dpiUseSSL = new DriverPropertyInfo("useSSL", Objects.equals(proto, "https") ? "true" : "false");
+    dpiUseSSL.choices = new String[]{"true", "false"};
+    dpiUseSSL.description = "Whether to use SSL";
+
+    DriverPropertyInfo dpiLevel = new DriverPropertyInfo("level", level.value());
+    dpiLevel.choices = ReadConsistencyLevel.BY_VALUE.keySet().toArray(new String[0]);
+    dpiLevel.description = "Which consistency level to apply";
+
+    return new DriverPropertyInfo[] {dpiUseSSL, dpiLevel};
   }
 }

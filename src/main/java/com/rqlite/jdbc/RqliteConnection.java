@@ -17,6 +17,7 @@ import java.sql.SQLXML;
 import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -41,13 +42,19 @@ public class RqliteConnection implements Connection {
 
   private ReadConsistencyLevel level;
   private boolean autoCommit;
+  private final RqliteJDBCUrl jdbcUrl;
+  private boolean isReadOnly;
 
   public RqliteConnection(String url, Properties info) throws SQLException {
-    RqliteJDBCUrl jdbcUrl = RqliteJDBCUrl.parse(url, info);
+    jdbcUrl = RqliteJDBCUrl.parse(url, info);
     this.rqlite = new RqliteImpl(jdbcUrl.getProto(), jdbcUrl.getHost(), jdbcUrl.getPort());
     this.closed = false;
     this.level = jdbcUrl.getLevel();
     this.autoCommit = true;
+  }
+
+  public RqliteJDBCUrl getUrl() {
+    return jdbcUrl;
   }
 
   /**
@@ -108,7 +115,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public PreparedStatement prepareStatement(String sql) throws SQLException {
-    return null;
+    return new RqlitePreparedStatement(this, sql);
   }
 
   /**
@@ -143,7 +150,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public CallableStatement prepareCall(String sql) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException(RqliteResultSet.SQL_FEATURE_NOT_SUPPORTED);
   }
 
   /**
@@ -160,7 +167,8 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public String nativeSQL(String sql) throws SQLException {
-    return null;
+    checkOpen();
+    return sql;
   }
 
   /**
@@ -200,7 +208,10 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setAutoCommit(boolean autoCommit) throws SQLException {
-
+    if (!autoCommit) {
+      throw new SQLException("Transactions are not supported by this driver");
+    }
+    this.autoCommit = autoCommit;
   }
 
   /**
@@ -215,7 +226,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public boolean getAutoCommit() throws SQLException {
-    return false;
+    return this.autoCommit;
   }
 
   /**
@@ -233,7 +244,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void commit() throws SQLException {
-
+    // No-op because isolation is NONE
   }
 
   /**
@@ -250,7 +261,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void rollback() throws SQLException {
-
+    throw new SQLException("Transactions are not supported by this driver");
   }
 
   /**
@@ -269,7 +280,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void close() throws SQLException {
-
+    this.closed = true;
   }
 
   /**
@@ -291,7 +302,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public boolean isClosed() throws SQLException {
-    return false;
+    return this.closed;
   }
 
   /**
@@ -309,7 +320,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public DatabaseMetaData getMetaData() throws SQLException {
-    return null;
+    return new RqliteDatabaseMetaData(this);
   }
 
   /**
@@ -326,7 +337,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setReadOnly(boolean readOnly) throws SQLException {
-
+    this.isReadOnly = readOnly; // TODO: This doesn't do anything
   }
 
   /**
@@ -340,7 +351,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public boolean isReadOnly() throws SQLException {
-    return false;
+    return this.isReadOnly;
   }
 
   /**
@@ -366,7 +377,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setCatalog(String catalog) throws SQLException {
-
+    checkOpen();
   }
 
   /**
@@ -407,7 +418,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setTransactionIsolation(int level) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -427,7 +438,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public int getTransactionIsolation() throws SQLException {
-    return 0;
+    return Connection.TRANSACTION_NONE;
   }
 
   /**
@@ -453,6 +464,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public SQLWarning getWarnings() throws SQLException {
+    checkOpen();
     return null;
   }
 
@@ -467,7 +479,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void clearWarnings() throws SQLException {
-
+    checkOpen();
   }
 
   /**
@@ -500,7 +512,10 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
-    return null;
+    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY || resultSetConcurrency != ResultSet.CONCUR_READ_ONLY) {
+      throw new SQLFeatureNotSupportedException();
+    }
+    return createStatement();
   }
 
   /**
@@ -536,7 +551,10 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-    return null;
+    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY || resultSetConcurrency != ResultSet.CONCUR_READ_ONLY) {
+      throw new SQLFeatureNotSupportedException();
+    }
+    return prepareStatement(sql);
   }
 
   /**
@@ -571,7 +589,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -602,7 +620,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Map<String, Class<?>> getTypeMap() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -634,7 +652,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setTypeMap(Map<String, Class<?>> map) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -658,7 +676,9 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setHoldability(int holdability) throws SQLException {
-
+    if (holdability != ResultSet.CLOSE_CURSORS_AT_COMMIT) {
+      throw new SQLFeatureNotSupportedException();
+    }
   }
 
   /**
@@ -677,7 +697,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public int getHoldability() throws SQLException {
-    return 0;
+    return ResultSet.CLOSE_CURSORS_AT_COMMIT;
   }
 
   /**
@@ -700,7 +720,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Savepoint setSavepoint() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -724,7 +744,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Savepoint setSavepoint(String name) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -748,7 +768,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void rollback(Savepoint savepoint) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -767,7 +787,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void releaseSavepoint(Savepoint savepoint) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -806,7 +826,10 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-    return null;
+    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY || resultSetConcurrency != ResultSet.CONCUR_READ_ONLY || resultSetHoldability != ResultSet.CLOSE_CURSORS_AT_COMMIT) {
+      throw new SQLFeatureNotSupportedException();
+    }
+    return createStatement();
   }
 
   /**
@@ -850,7 +873,10 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-    return null;
+    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY || resultSetConcurrency != ResultSet.CONCUR_READ_ONLY || resultSetHoldability != ResultSet.CLOSE_CURSORS_AT_COMMIT) {
+      throw new SQLFeatureNotSupportedException();
+    }
+    return prepareStatement(sql);
   }
 
   /**
@@ -891,7 +917,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -938,7 +964,10 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-    return null;
+    if (autoGeneratedKeys == Statement.RETURN_GENERATED_KEYS) {
+      throw new SQLFeatureNotSupportedException("Returning generated keys is not supported");
+    }
+    return prepareStatement(sql);
   }
 
   /**
@@ -987,7 +1016,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1036,7 +1065,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1055,7 +1084,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Clob createClob() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1074,7 +1103,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Blob createBlob() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1093,7 +1122,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public NClob createNClob() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1112,7 +1141,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public SQLXML createSQLXML() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1138,7 +1167,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public boolean isValid(int timeout) throws SQLException {
-    return false;
+    return !closed;
   }
 
   /**
@@ -1194,7 +1223,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setClientInfo(String name, String value) throws SQLClientInfoException {
-
+    throw new SQLClientInfoException("Not Supported", Collections.emptyMap());
   }
 
   /**
@@ -1225,7 +1254,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setClientInfo(Properties properties) throws SQLClientInfoException {
-
+    throw new SQLClientInfoException("Not Supported", Collections.emptyMap());
   }
 
   /**
@@ -1248,7 +1277,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public String getClientInfo(String name) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1297,7 +1326,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Array createArrayOf(String typeName, Object[] elements) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1315,7 +1344,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public Struct createStruct(String typeName, Object[] attributes) throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1339,7 +1368,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setSchema(String schema) throws SQLException {
-
+    checkOpen();
   }
 
   /**
@@ -1353,6 +1382,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public String getSchema() throws SQLException {
+    checkOpen();
     return null;
   }
 
@@ -1489,7 +1519,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1509,7 +1539,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public int getNetworkTimeout() throws SQLException {
-    return 0;
+    throw new SQLFeatureNotSupportedException();
   }
 
   /**
@@ -1531,7 +1561,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public <T> T unwrap(Class<T> iface) throws SQLException {
-    return null;
+    return iface.cast(this);
   }
 
   /**
@@ -1551,7 +1581,7 @@ public class RqliteConnection implements Connection {
    */
   @Override
   public boolean isWrapperFor(Class<?> iface) throws SQLException {
-    return false;
+    return iface.isInstance(this);
   }
 
   private void checkOpen() throws SQLException {
@@ -1599,24 +1629,34 @@ public class RqliteConnection implements Connection {
   }
 
   int execute(com.rqlite.dto.Statement statement, RqliteStatement sqlStatement) throws SQLException {
+    return executeBatch(List.of(statement), sqlStatement)[0];
+  }
+
+  int[] executeBatch(List<com.rqlite.dto.Statement> statements, RqliteStatement sqlStatement) throws SQLException {
     checkOpen();
     try {
       if (autoCommit) {
         ExecuteResults results = rqlite.Execute(
             ExecuteRequest.newBuilder()
-                .setStatements(List.of(statement))
+                .setStatements(statements)
                 .setTransaction(false)
                 .setTimeout(TimeUnit.SECONDS.toMillis(sqlStatement.getQueryTimeout())) // TODO: We need to clarify the unit in the driver
                 .build(),
             false
         );
-        if (results == null || results.results == null || results.results.length < 1) {
+        if (results == null || results.results == null || results.results.length < statements.size()) {
           throw new SQLException(RESULT_COUNT_MISMATCH);
         }
-        if (results.results[0].error != null) {
-          throw new SQLException(results.results[0].error);
+
+        int[] response = new int[results.results.length];
+        for (int i = 0; i < results.results.length; i++) {
+          if (results.results[i].error != null) {
+            throw new SQLException(results.results[i].error); // TODO: Maybe we can figure out a way to still return the other ints
+          }
+          response[i] = results.results[i].rowsAffected;
         }
-        return results.results[0].rowsAffected;
+
+        return response;
       } else {
         throw new SQLFeatureNotSupportedException("Transactions are not supported by this driver");
       }
@@ -1625,7 +1665,7 @@ public class RqliteConnection implements Connection {
     }
   }
 
-  boolean request(com.rqlite.dto.Statement statement, RqliteStatement sqlStatement) throws SQLException {
+  ExecuteQueryRequestResults.Result request(com.rqlite.dto.Statement statement, RqliteStatement sqlStatement) throws SQLException {
     checkOpen();
     try {
       if (autoCommit) {
@@ -1642,7 +1682,7 @@ public class RqliteConnection implements Connection {
         if (results.results[0].error != null) {
           throw new SQLException(results.results[0].error);
         }
-        return results.results[0].columns != null;
+        return results.results[0];
       } else {
         throw new SQLFeatureNotSupportedException("Transactions are not supported by this driver");
       }

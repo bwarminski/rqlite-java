@@ -73,7 +73,7 @@ public class RqliteDriver implements Driver {
    */
   @Override
   public boolean acceptsURL(String url) throws SQLException {
-    return false;
+    return null != url && url.startsWith("jdbc:rqlite:");
   }
 
   /**
@@ -97,7 +97,15 @@ public class RqliteDriver implements Driver {
    */
   @Override
   public DriverPropertyInfo[] getPropertyInfo(String url, Properties info) throws SQLException {
-    return new DriverPropertyInfo[0];
+    if (null == info) {
+      info = new Properties();
+    }
+    if (!acceptsURL(url)) {
+      return new DriverPropertyInfo[0];
+    }
+
+    RqliteJDBCUrl jdbcUrl = RqliteJDBCUrl.parse(url, info);
+    return jdbcUrl.getPropertyInfo();
   }
 
   /**
@@ -107,7 +115,7 @@ public class RqliteDriver implements Driver {
    */
   @Override
   public int getMajorVersion() {
-    return 0;
+    return 1;
   }
 
   /**
@@ -159,6 +167,6 @@ public class RqliteDriver implements Driver {
    */
   @Override
   public Logger getParentLogger() throws SQLFeatureNotSupportedException {
-    return null;
+    throw new SQLFeatureNotSupportedException();
   }
 }

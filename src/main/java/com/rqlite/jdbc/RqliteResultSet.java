@@ -25,10 +25,6 @@ import java.sql.SQLXML;
 import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Map;
@@ -48,7 +44,7 @@ public class RqliteResultSet implements ResultSet {
   private boolean closed;
   boolean lastWasNull;
   private int fetchSize;
-  private int maxRows;
+  private final int maxRows;
 
   private final RqliteStatement statement;
 
@@ -99,7 +95,7 @@ public class RqliteResultSet implements ResultSet {
       return false;
     }
     cursor++;
-    return cursor < result.values.length;
+    return this.result.values != null && cursor < result.values.length;
   }
 
   /**
@@ -185,13 +181,14 @@ public class RqliteResultSet implements ResultSet {
   }
 
   private Object getColumnValue(int columnIndex) throws SQLException {
-    if (columnIndex < 1 || columnIndex > result.types.length) {
+    if (columnIndex < 1 || result.types == null || result.values == null || columnIndex > result.types.length) {
       throw new SQLException("Invalid Column Index: " + columnIndex);
     }
 
     Object value = result.values[cursor][columnIndex-1];
-    if (value == null) {
+    if (value == null || com.google.api.client.util.Data.isNull(value)) { // Yuck
       lastWasNull = true;
+      return null;
     }
     return value;
   }
@@ -593,12 +590,7 @@ public class RqliteResultSet implements ResultSet {
     }
 
     String dateString = this.getString(columnIndex);
-    try {
-      LocalDate localDateTime = LocalDate.parse(dateString, DateTimeFormatter.ISO_DATE);
-      return java.sql.Date.valueOf(localDateTime);
-    } catch (Exception e) {
-      throw new SQLException(e);
-    }
+    return DateTimeHandler.parseDate(dateString);
   }
 
   /**
@@ -625,12 +617,7 @@ public class RqliteResultSet implements ResultSet {
     }
 
     String dateString = this.getString(columnIndex);
-    try {
-      LocalTime localTime = LocalTime.parse(dateString, DateTimeFormatter.ISO_LOCAL_TIME);
-      return Time.valueOf(localTime);
-    } catch (Exception e) {
-      throw new SQLException(e);
-    }
+    return DateTimeHandler.parseTime(dateString);
   }
 
   /**
@@ -657,12 +644,7 @@ public class RqliteResultSet implements ResultSet {
     }
 
     String dateString = this.getString(columnIndex);
-    try {
-      ZonedDateTime localDateTime = ZonedDateTime.parse(dateString, DateTimeFormatter.ISO_ZONED_DATE_TIME);
-      return Timestamp.from(localDateTime.toInstant());
-    } catch (Exception e) {
-      throw new SQLException(e);
-    }
+    return DateTimeHandler.parseTimestamp(dateString);
   }
 
   /**
@@ -4994,7 +4976,7 @@ public class RqliteResultSet implements ResultSet {
       throw new SQLException("Attempted operation at invalid cursor position");
     }
 
-    if (result.values == null || cursor >= result.values.length || cursor >= maxRows) {
+    if (result.values == null || cursor >= result.values.length || (maxRows > 0 && cursor >= maxRows)) {
       throw new SQLException("Attempted operation at invalid cursor position");
     }
   }

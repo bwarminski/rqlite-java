@@ -201,8 +201,14 @@ public class RqliteClientTest {
         value = rows.results[0].values[0][0];
         Assert.assertNotNull(value);
         Assert.assertEquals("42", String.valueOf(value));
+    }
 
-
+    @Test
+    public void testJSONExtract() throws RqliteException {
+        QueryResults rows = rqlite.Query("select json_extract('{\"a\":2,\"c\":[4,5,{\"f\":7}]}', '$.x')", ReadConsistencyLevel.NONE);
+        Object value = rows.results[0].values[0][0];
+        // TODO: I want the line below to pass but it doesn't
+         Assert.assertNull(value); // This is really strange. Perhaps a feature of the Google HTTP library?
     }
 
     @After

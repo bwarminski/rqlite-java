@@ -31,7 +31,7 @@ public interface Rqlite {
 
         private final String value;
 
-        private static final Map<String, ReadConsistencyLevel> BY_VALUE = new HashMap<>();
+        public static final Map<String, ReadConsistencyLevel> BY_VALUE = new HashMap<>();
 
         static {
             for (ReadConsistencyLevel e : values()) {

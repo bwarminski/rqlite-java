@@ -9,16 +9,26 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLTimeoutException;
 import java.sql.SQLWarning;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.rqlite.dto.ExecuteQueryRequestResults;
+import com.rqlite.dto.QueryResults.Result;
 
 public class RqliteStatement implements Statement {
-  private final RqliteConnection conn;
-  private boolean closed = true;
+  protected final RqliteConnection conn;
+  private boolean closed;
   private int maxRows = 0;
   private int queryTimeOutSec = 0;
+  protected ResultSet lastResult = null;
+  protected int lastUpdateCount = -1;
+  private int fetchSize = 0;
+  private final List<String> batch;
 
   public RqliteStatement(RqliteConnection rqliteConnection) {
     this.conn = rqliteConnection;
     this.closed = false;
+    this.batch = new ArrayList<>();
   }
 
   /**
@@ -46,7 +56,9 @@ public class RqliteStatement implements Statement {
   public ResultSet executeQuery(String sql) throws SQLException {
     checkOpen();
     checkSQLNullOrEmpty(sql);
-    return conn.query(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
+    clearLastResults();
+    lastResult = conn.query(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
+    return lastResult;
   }
 
   /**
@@ -75,7 +87,9 @@ public class RqliteStatement implements Statement {
   public int executeUpdate(String sql) throws SQLException {
     checkOpen();
     checkSQLNullOrEmpty(sql);
-    return conn.execute(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
+    clearLastResults();
+    lastUpdateCount = conn.execute(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
+    return lastUpdateCount;
   }
 
   /**
@@ -180,7 +194,9 @@ public class RqliteStatement implements Statement {
   @Override
   public void setMaxRows(int max) throws SQLException {
     checkOpen();
-    if (max < 0) throw new SQLException("Attempt to set max rows less than 0");
+    if (max < 0) {
+      throw new SQLException("Attempt to set max rows less than 0");
+    }
     maxRows = max;
   }
 
@@ -381,7 +397,22 @@ public class RqliteStatement implements Statement {
   public boolean execute(String sql) throws SQLException {
     checkOpen();
     checkSQLNullOrEmpty(sql);
-    return conn.request(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
+    clearLastResults();
+
+    ExecuteQueryRequestResults.Result requestResult = conn.request(com.rqlite.dto.Statement.newBuilder().setSql(sql).build(), this);
+    if (requestResult.columns == null) {
+      lastUpdateCount = requestResult.rowsAffected;
+      return false;
+    } else {
+      Result clone = new Result(); // Yuck
+      clone.columns = requestResult.columns;
+      clone.values = requestResult.values;
+      clone.types = requestResult.types;
+      clone.time = requestResult.time;
+      clone.error = requestResult.error;
+      lastResult = new RqliteResultSet(clone, this);
+      return true;
+    }
   }
 
   /**
@@ -396,7 +427,8 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public ResultSet getResultSet() throws SQLException {
-    return null;
+    checkOpen();
+    return lastResult;
   }
 
   /**
@@ -412,7 +444,8 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getUpdateCount() throws SQLException {
-    return 0;
+    checkOpen();
+    return lastUpdateCount;
   }
 
   /**
@@ -436,7 +469,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean getMoreResults() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -461,7 +494,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setFetchDirection(int direction) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -481,7 +514,8 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getFetchDirection() throws SQLException {
-    return 0;
+    checkOpen();
+    return ResultSet.FETCH_FORWARD;
   }
 
   /**
@@ -500,7 +534,11 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setFetchSize(int rows) throws SQLException {
-
+    checkOpen();
+    if (rows < 0) {
+      throw new SQLException("Illegal value for fetch size");
+    }
+    fetchSize = rows;
   }
 
   /**
@@ -520,7 +558,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getFetchSize() throws SQLException {
-    return 0;
+    return fetchSize;
   }
 
   /**
@@ -535,7 +573,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getResultSetConcurrency() throws SQLException {
-    return 0;
+    return ResultSet.CONCUR_READ_ONLY;
   }
 
   /**
@@ -551,7 +589,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getResultSetType() throws SQLException {
-    return 0;
+    return ResultSet.TYPE_FORWARD_ONLY;
   }
 
   /**
@@ -574,7 +612,9 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void addBatch(String sql) throws SQLException {
-
+    checkOpen();
+    checkSQLNullOrEmpty(sql);
+    this.batch.add(sql);
   }
 
   /**
@@ -590,7 +630,8 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void clearBatch() throws SQLException {
-
+    checkOpen();
+    this.batch.clear();
   }
 
   /**
@@ -649,7 +690,13 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int[] executeBatch() throws SQLException {
-    return new int[0];
+    checkOpen();
+    clearLastResults();
+    try {
+      return conn.executeBatch(batch.stream().map((sql) -> com.rqlite.dto.Statement.newBuilder().setSql(sql).build()).toList(), this);
+    } finally {
+      clearBatch();
+    }
   }
 
   /**
@@ -663,7 +710,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public Connection getConnection() throws SQLException {
-    return null;
+    return this.conn;
   }
 
   /**
@@ -705,7 +752,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean getMoreResults(int current) throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -726,7 +773,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public ResultSet getGeneratedKeys() throws SQLException {
-    return null;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -766,7 +813,10 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int executeUpdate(String sql, int autoGeneratedKeys) throws SQLException {
-    return 0;
+    if (autoGeneratedKeys == Statement.RETURN_GENERATED_KEYS) {
+      throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
+    }
+    return executeUpdate(sql);
   }
 
   /**
@@ -803,7 +853,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int executeUpdate(String sql, int[] columnIndexes) throws SQLException {
-    return 0;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -841,7 +891,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int executeUpdate(String sql, String[] columnNames) throws SQLException {
-    return 0;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -897,7 +947,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean execute(String sql, int autoGeneratedKeys) throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -949,7 +999,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean execute(String sql, int[] columnIndexes) throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -1002,7 +1052,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean execute(String sql, String[] columnNames) throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -1017,7 +1067,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public int getResultSetHoldability() throws SQLException {
-    return 0;
+    return ResultSet.CLOSE_CURSORS_AT_COMMIT;
   }
 
   /**
@@ -1030,7 +1080,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean isClosed() throws SQLException {
-    return false;
+    return conn.isClosed() || closed;
   }
 
   /**
@@ -1055,7 +1105,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void setPoolable(boolean poolable) throws SQLException {
-
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -1071,7 +1121,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean isPoolable() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -1091,7 +1141,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public void closeOnCompletion() throws SQLException {
-
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -1106,7 +1156,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean isCloseOnCompletion() throws SQLException {
-    return false;
+    throw new SQLFeatureNotSupportedException("SQL Feature Not Supported");
   }
 
   /**
@@ -1128,7 +1178,7 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public <T> T unwrap(Class<T> iface) throws SQLException {
-    return null;
+    return iface.cast(this);
   }
 
   /**
@@ -1148,11 +1198,11 @@ public class RqliteStatement implements Statement {
    */
   @Override
   public boolean isWrapperFor(Class<?> iface) throws SQLException {
-    return false;
+    return iface.isInstance(this);
   }
 
   protected void checkOpen() throws SQLException {
-    if (closed) {
+    if (closed || conn.isClosed()) {
       throw new SQLException("Statement Closed");
     }
   }
@@ -1161,5 +1211,10 @@ public class RqliteStatement implements Statement {
     if (sql == null || sql.trim().isEmpty()) {
       throw new SQLException("SQL Statement is Not Valid");
     }
+  }
+
+  protected void clearLastResults() {
+    this.lastResult = null;
+    this.lastUpdateCount = -1;
   }
 }
